@@ -55,6 +55,18 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(self.report()["outcome"], "pending")
         self.assertEqual(self.report()["aws_attempt"], "mixed")
 
+    def test_duplicate_events_with_equivalent_offsets(self):
+        original = self.report()
+        other = dict(self.event, eventTime="2026-11-14T10:01:00+01:00")
+        for events in ([self.event, other], [other, self.event]):
+            self.case["events"] = events
+            self.assertEqual(self.report(), original)
+
+    def test_duplicate_events_with_different_instants_conflict(self):
+        self.case["events"].append(dict(self.event, eventTime="2026-11-14T10:01:00.000001+01:00"))
+        with self.assertRaisesRegex(ValueError, "Conflicting copies"):
+            self.report()
+
     def test_failed_read(self):
         class AwsError(Exception):
             pass

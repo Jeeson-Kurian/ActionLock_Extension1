@@ -100,7 +100,9 @@ def matching_events(target, events, started, cutoff):
             attempt = "failed"
         else:
             attempt = "accepted"
-        record = {"id": event_id, "time": event["eventTime"], "attempt": attempt}
+        # Use the same UTC representation for duplicate checks and report ordering.
+        utc_time = at.isoformat().replace("+00:00", "Z")
+        record = {"id": event_id, "time": utc_time, "attempt": attempt}
         if event_id in matched and matched[event_id] != record:
             raise ValueError("Conflicting copies of the same CloudTrail event")
         matched[event_id] = record
