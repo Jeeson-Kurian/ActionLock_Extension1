@@ -1,7 +1,7 @@
 """Collect a bounded window of DynamoDB management events for one review."""
-import json
 
 from .evidence import timestamp, validate
+from .json_input import load_evidence_json
 
 
 class IncompleteHistory(ValueError):
@@ -27,7 +27,7 @@ def lookup_events(client, target, until, *, page_limit=20):
         if not isinstance(page.get("Events"), list):
             raise IncompleteHistory("CloudTrail returned a page without an event list")
         for entry in page["Events"]:
-            event = json.loads(entry["CloudTrailEvent"])
+            event = load_evidence_json(entry["CloudTrailEvent"])
             if not isinstance(event, dict):
                 raise IncompleteHistory("CloudTrail returned an invalid management event")
             collected.append(event)

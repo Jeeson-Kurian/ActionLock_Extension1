@@ -5,13 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .evidence import observe_table, review, validate
-
-
-def unique(pairs):
-    obj = dict(pairs)
-    if len(obj) != len(pairs):
-        raise ValueError("Duplicate JSON field")
-    return obj
+from .json_input import load_evidence_json
 
 
 def main():
@@ -33,7 +27,7 @@ def main():
     if any(selectors) and not all(selectors):
         parser.error("--receipts, --receipt-id and --address must be used together")
     try:
-        case = json.loads(args.case.read_text(encoding="utf-8"), object_pairs_hook=unique)
+        case = load_evidence_json(args.case.read_text(encoding="utf-8"))
         approval = None
         if args.receipts:
             from .receipts import decision_target

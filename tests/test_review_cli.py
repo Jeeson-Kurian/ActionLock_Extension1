@@ -32,6 +32,12 @@ class ReviewTests(unittest.TestCase):
         with self.assertRaises(IncompleteHistory):
             self.lookup([{"Events": [], "NextToken": "more"}], limit=1)
 
+    def test_duplicate_json_fields_stop_collection(self):
+        for raw in ('{"eventID":"first","eventID":"second"}',
+                    '{"requestParameters":{"tableName":"first","tableName":"second"}}'):
+            with self.subTest(raw=raw), self.assertRaisesRegex(ValueError, "Duplicate JSON field"):
+                self.lookup([{"Events": [{"CloudTrailEvent": raw}]}])
+
     def test_missing_page_data(self):
         with self.assertRaises(IncompleteHistory):
             self.lookup([{}])

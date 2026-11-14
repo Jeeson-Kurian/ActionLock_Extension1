@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from .evidence import review
+from .json_input import load_evidence_json
 
 
 def replay(cases):
@@ -18,7 +19,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("cases", type=Path)
     args = parser.parse_args()
-    cases = json.loads(args.cases.read_text())
+    try:
+        cases = load_evidence_json(args.cases.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        parser.error(str(exc))
     if not isinstance(cases, list) or not cases:
         parser.error("At least one labelled case is required")
     results = list(replay(cases))
