@@ -1,4 +1,6 @@
 """Adapter for the local, verified ActionLock receipt chain."""
+
+
 def decision_target(path, receipt_id, address):
     from actionlock.contract import HmacSigner
     from actionlock.receipts import ReceiptLog
@@ -20,7 +22,28 @@ def decision_target(path, receipt_id, address):
     if len(targets) != 1:
         raise ValueError("Decision has no unique supported target for that address")
     target = targets[0]
-    return ({"receipt": receipt_id, "account": fields["aws_account_id"], "region": fields["region"],
-             "table": target["table"], "operation": target["operation"], "started_at": decision["created_at"]},
-            {"contract_id": fields["contract_id"], "plan_digest": fields["plan_digest"],
-             "outcome": fields["outcome"], "approvers": fields["approvers"], "address": address})
+    apply_rows = [row for row in entries if row["kind"] == "apply"
+                  and row["fields"].get("decision_receipt") == receipt_id]
+    if len(apply_rows) > 1:
+        raise ValueError("Multiple apply receipts reference this decision")
+    runner_result = {"status": "pending"}
+    if apply_rows:
+        row = apply_rows[0]
+        details = row["fields"]
+        if details.get("applied") is True:
+            status = "apply_completed"
+        elif isinstance(details.get("exit_code"), int):
+            status = "apply_failed_possibly_partial"
+        else:
+            status = "runner_refused"
+        runner_result = {"status": status, "observed_at": row["created_at"], "receipt_id": row["receipt_id"]}
+    target_fields = {
+        "receipt": receipt_id, "account": fields["aws_account_id"], "region": fields["region"],
+        "table": target["table"], "operation": target["operation"], "started_at": decision["created_at"],
+    }
+    approval = {
+        "contract_id": fields["contract_id"], "plan_digest": fields["plan_digest"],
+        "outcome": fields["outcome"], "approvers": fields["approvers"], "address": address,
+        "runner_result": runner_result,
+    }
+    return target_fields, approval

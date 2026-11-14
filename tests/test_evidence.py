@@ -73,6 +73,11 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(self.report()["aws_attempt"], "failed")
         self.assertNotIn("customer-sensitive-material", json.dumps(self.report()))
 
+    def test_ambiguous_error_field_cannot_establish_acceptance(self):
+        self.event["errorCode"] = ""
+        self.assertEqual(self.report()["aws_attempt"], "failed")
+        self.assertEqual(self.report()["outcome"], "pending")
+
     def test_unrelated_read(self):
         self.case["observation"]["table"] = "wrong"
         with self.assertRaises(ValueError):

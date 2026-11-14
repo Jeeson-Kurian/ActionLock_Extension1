@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "actionlock-extension1"
+version = "0.1.0"
+description = "Read-only outcome evidence for ActionLock infrastructure decisions"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+aws = ["boto3>=1.28,<2"]
+
+[project.scripts]
+actionlock-evidence = "extension1.__main__:main"
+
+[tool.setuptools]
+packages = ["extension1"]

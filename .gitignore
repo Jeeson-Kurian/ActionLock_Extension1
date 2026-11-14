@@ -5,3 +5,6 @@ __pycache__/
 *.db
 receipts.jsonl*
 .env
+build/
+*.egg-info/
+dist/

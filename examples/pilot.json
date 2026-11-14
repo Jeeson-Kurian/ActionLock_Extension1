@@ -1,0 +1,399 @@
+[
+  {
+    "target": {
+      "receipt": "al-synthetic-001",
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "operation": "DeleteTable",
+      "started_at": "2026-11-14T09:00:00Z"
+    },
+    "events": [
+      {
+        "eventID": "synthetic-denial",
+        "eventTime": "2026-11-14T09:01:00Z",
+        "eventSource": "dynamodb.amazonaws.com",
+        "eventName": "DeleteTable",
+        "errorCode": "AccessDeniedException",
+        "recipientAccountId": "111111111111",
+        "awsRegion": "eu-west-1",
+        "requestParameters": {
+          "tableName": "staging-orders"
+        },
+        "userIdentity": {
+          "sessionContext": {
+            "sourceIdentity": "al-synthetic-001"
+          }
+        }
+      }
+    ],
+    "observation": {
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "state": "present",
+      "observed_at": "2026-11-14T09:02:00Z"
+    },
+    "as_of": "2026-11-14T09:03:00Z",
+    "name": "protected table still present",
+    "expected": {
+      "aws_attempt": "denied",
+      "outcome": "denial_and_opposite_state_observed"
+    }
+  },
+  {
+    "target": {
+      "receipt": "al-synthetic-001",
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "operation": "DeleteTable",
+      "started_at": "2026-11-14T09:00:00Z"
+    },
+    "events": [
+      {
+        "eventID": "synthetic-denial",
+        "eventTime": "2026-11-14T09:01:00Z",
+        "eventSource": "dynamodb.amazonaws.com",
+        "eventName": "DeleteTable",
+        "recipientAccountId": "111111111111",
+        "awsRegion": "eu-west-1",
+        "requestParameters": {
+          "tableName": "staging-orders"
+        },
+        "userIdentity": {
+          "sessionContext": {
+            "sourceIdentity": "al-synthetic-001"
+          }
+        }
+      }
+    ],
+    "observation": {
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "state": "absent",
+      "observed_at": "2026-11-14T09:02:00Z"
+    },
+    "as_of": "2026-11-14T09:03:00Z",
+    "name": "successful deletion",
+    "expected": {
+      "aws_attempt": "accepted",
+      "outcome": "expected_state_observed"
+    }
+  },
+  {
+    "target": {
+      "receipt": "al-synthetic-001",
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "operation": "CreateTable",
+      "started_at": "2026-11-14T09:00:00Z"
+    },
+    "events": [
+      {
+        "eventID": "synthetic-denial",
+        "eventTime": "2026-11-14T09:01:00Z",
+        "eventSource": "dynamodb.amazonaws.com",
+        "eventName": "CreateTable",
+        "recipientAccountId": "111111111111",
+        "awsRegion": "eu-west-1",
+        "requestParameters": {
+          "tableName": "staging-orders"
+        },
+        "userIdentity": {
+          "sessionContext": {
+            "sourceIdentity": "al-synthetic-001"
+          }
+        }
+      }
+    ],
+    "observation": {
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "state": "transitioning",
+      "observed_at": "2026-11-14T09:02:00Z"
+    },
+    "as_of": "2026-11-14T09:03:00Z",
+    "name": "asynchronous creation",
+    "expected": {
+      "aws_attempt": "accepted",
+      "outcome": "pending"
+    }
+  },
+  {
+    "target": {
+      "receipt": "al-synthetic-001",
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "operation": "CreateTable",
+      "started_at": "2026-11-14T09:00:00Z"
+    },
+    "events": [
+      {
+        "eventID": "synthetic-denial",
+        "eventTime": "2026-11-14T09:01:00Z",
+        "eventSource": "dynamodb.amazonaws.com",
+        "eventName": "CreateTable",
+        "recipientAccountId": "111111111111",
+        "awsRegion": "eu-west-1",
+        "requestParameters": {
+          "tableName": "staging-orders"
+        },
+        "userIdentity": {
+          "sessionContext": {
+            "sourceIdentity": "al-synthetic-001"
+          }
+        }
+      }
+    ],
+    "observation": {
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "state": "present",
+      "observed_at": "2026-11-14T09:02:00Z"
+    },
+    "as_of": "2026-11-14T09:03:00Z",
+    "name": "active new table",
+    "expected": {
+      "aws_attempt": "accepted",
+      "outcome": "expected_state_observed"
+    }
+  },
+  {
+    "target": {
+      "receipt": "al-synthetic-001",
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "operation": "DeleteTable",
+      "started_at": "2026-11-14T09:00:00Z"
+    },
+    "events": [],
+    "observation": {
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "state": "present",
+      "observed_at": "2026-11-14T09:02:00Z"
+    },
+    "as_of": "2026-11-14T09:03:00Z",
+    "name": "missing event",
+    "expected": {
+      "aws_attempt": "pending",
+      "outcome": "pending"
+    }
+  },
+  {
+    "target": {
+      "receipt": "al-synthetic-001",
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "operation": "DeleteTable",
+      "started_at": "2026-11-14T09:00:00Z"
+    },
+    "events": [
+      {
+        "eventID": "synthetic-denial",
+        "eventTime": "2026-11-14T09:01:00Z",
+        "eventSource": "dynamodb.amazonaws.com",
+        "eventName": "DeleteTable",
+        "errorCode": "AccessDeniedException",
+        "recipientAccountId": "111111111111",
+        "awsRegion": "eu-west-1",
+        "requestParameters": {
+          "tableName": "staging-orders"
+        },
+        "userIdentity": {
+          "sessionContext": {
+            "sourceIdentity": "al-synthetic-001"
+          }
+        }
+      }
+    ],
+    "observation": {
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "state": "unreadable",
+      "observed_at": "2026-11-14T09:02:00Z"
+    },
+    "as_of": "2026-11-14T09:03:00Z",
+    "name": "read permission unavailable",
+    "expected": {
+      "aws_attempt": "denied",
+      "outcome": "pending"
+    }
+  },
+  {
+    "target": {
+      "receipt": "al-synthetic-001",
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "operation": "CreateTable",
+      "started_at": "2026-11-14T09:00:00Z"
+    },
+    "events": [
+      {
+        "eventID": "synthetic-denial",
+        "eventTime": "2026-11-14T09:01:00Z",
+        "eventSource": "dynamodb.amazonaws.com",
+        "eventName": "CreateTable",
+        "errorCode": "ThrottlingException",
+        "recipientAccountId": "111111111111",
+        "awsRegion": "eu-west-1",
+        "requestParameters": {
+          "tableName": "staging-orders"
+        },
+        "userIdentity": {
+          "sessionContext": {
+            "sourceIdentity": "al-synthetic-001"
+          }
+        }
+      }
+    ],
+    "observation": {
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "state": "absent",
+      "observed_at": "2026-11-14T09:02:00Z"
+    },
+    "as_of": "2026-11-14T09:03:00Z",
+    "name": "service throttled request",
+    "expected": {
+      "aws_attempt": "failed",
+      "outcome": "pending"
+    }
+  },
+  {
+    "target": {
+      "receipt": "al-synthetic-001",
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "operation": "DeleteTable",
+      "started_at": "2026-11-14T09:00:00Z"
+    },
+    "events": [
+      {
+        "eventID": "synthetic-denial",
+        "eventTime": "2026-11-14T09:01:00Z",
+        "eventSource": "dynamodb.amazonaws.com",
+        "eventName": "DeleteTable",
+        "errorCode": "AccessDeniedException",
+        "recipientAccountId": "111111111111",
+        "awsRegion": "eu-west-1",
+        "requestParameters": {
+          "tableName": "staging-orders"
+        },
+        "userIdentity": {
+          "sessionContext": {
+            "sourceIdentity": "al-synthetic-001"
+          }
+        }
+      }
+    ],
+    "observation": {
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "state": "absent",
+      "observed_at": "2026-11-14T09:02:00Z"
+    },
+    "as_of": "2026-11-14T09:03:00Z",
+    "name": "conflicting state after denial",
+    "expected": {
+      "aws_attempt": "denied",
+      "outcome": "conflicting_evidence"
+    }
+  },
+  {
+    "target": {
+      "receipt": "al-synthetic-001",
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "operation": "DeleteTable",
+      "started_at": "2026-11-14T09:00:00Z"
+    },
+    "events": [
+      {
+        "eventID": "synthetic-denial",
+        "eventTime": "2026-11-14T09:01:00Z",
+        "eventSource": "dynamodb.amazonaws.com",
+        "eventName": "DeleteTable",
+        "recipientAccountId": "111111111111",
+        "awsRegion": "eu-west-1",
+        "requestParameters": {
+          "tableName": "staging-orders"
+        },
+        "userIdentity": {
+          "sessionContext": {
+            "sourceIdentity": "al-synthetic-001"
+          }
+        }
+      }
+    ],
+    "observation": {
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "state": "present",
+      "observed_at": "2026-11-14T09:02:00Z"
+    },
+    "as_of": "2026-11-14T09:03:00Z",
+    "name": "accepted delete but observed active",
+    "expected": {
+      "aws_attempt": "accepted",
+      "outcome": "state_differs"
+    }
+  },
+  {
+    "target": {
+      "receipt": "al-synthetic-001",
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "operation": "DeleteTable",
+      "started_at": "2026-11-14T09:00:00Z"
+    },
+    "events": [
+      {
+        "eventID": "synthetic-denial",
+        "eventTime": "2026-11-14T09:01:00Z",
+        "eventSource": "dynamodb.amazonaws.com",
+        "eventName": "DeleteTable",
+        "recipientAccountId": "111111111111",
+        "awsRegion": "eu-west-1",
+        "requestParameters": {
+          "tableName": "staging-orders"
+        },
+        "userIdentity": {
+          "sessionContext": {
+            "sourceIdentity": "al-synthetic-001"
+          }
+        }
+      }
+    ],
+    "observation": {
+      "account": "111111111111",
+      "region": "eu-west-1",
+      "table": "staging-orders",
+      "state": "present",
+      "observed_at": "2026-11-14T09:00:10Z"
+    },
+    "as_of": "2026-11-14T09:03:00Z",
+    "name": "old read",
+    "expected": {
+      "aws_attempt": "accepted",
+      "outcome": "pending"
+    }
+  }
+]

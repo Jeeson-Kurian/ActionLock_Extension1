@@ -22,3 +22,5 @@ python -m extension1 evidence.json --receipts receipts.jsonl --receipt-id RECEIP
 ```
 
 A pre-execution refusal is recorded by ActionLock's verifier. Only consumed decisions can have AWS execution evidence. Keep the verifier trace for pre-execution cases. Do not give a proposal-generating agent access to the backend signing key.
+
+The verified report also shows the runner's signed apply status when available. A failed Terraform process may have applied some changes; the per-resource AWS event and later read are reconciled separately. Loss of a final apply receipt leaves the runner result pending.

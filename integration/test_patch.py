@@ -107,6 +107,7 @@ class ExtensionIntegration(unittest.TestCase):
             with patch("actionlock.contract.HmacSigner.from_environment", return_value=signer()):
                 target, approval = decision_target(receipts.path, run.receipt_id, addr)
             self.assertEqual(set(approval["approvers"]), set(TOKENS))
+            self.assertEqual(approval["runner_result"]["status"], "apply_failed_possibly_partial")
             sample = json.loads((Path(__file__).resolve().parents[1]/"examples/protected-table.json").read_text())
             event = sample["events"][0]
             event["awsRegion"] = sample["observation"]["region"] = c.region

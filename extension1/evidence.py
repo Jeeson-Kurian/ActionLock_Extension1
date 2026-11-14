@@ -49,12 +49,28 @@ def observe_table(client, target, clock=lambda: datetime.now(timezone.utc)):
     return {**base, "state": state, "observed_at": clock().isoformat()}
 
 
-def review(target, events, observation, *, as_of):
-    """Inputs come from a trusted collector. Missing or conflicting evidence remains explicit."""
-    validate(target)
-    started, cutoff = timestamp(target["started_at"]), timestamp(as_of)
-    if cutoff < started:
-        raise ValueError("Review predates decision")
+def validate_observation(target, observation):
+    if set(observation) != {"account", "region", "table", "state", "observed_at"}:
+        raise ValueError("Unexpected observation fields")
+    if any(observation.get(k) != target[k] for k in ("region", "account", "table")):
+        raise ValueError("Observation target differs from authorised target")
+    state, observed = observation["state"], observation["observed_at"]
+    if state not in {"unknown", "absent", "present", "unreadable", "transitioning"}:
+        raise ValueError("Invalid observation")
+    observed_time = timestamp(observed)
+    return state, observed_time
+
+
+def check_baseline(target, observation):
+    """A pre-decision observation supplies context and cannot establish the execution outcome."""
+    _, observed_time = validate_observation(target, observation)
+    if observed_time > timestamp(target["started_at"]):
+        raise ValueError("Baseline was observed after the decision")
+    return observation
+
+
+def matching_events(target, events, started, cutoff):
+    """Return redacted, unique events for the exact authorised target."""
     if not isinstance(events, list):
         raise ValueError("Expected a list of CloudTrail records")
     matched = {}
@@ -76,7 +92,7 @@ def review(target, events, observation, *, as_of):
         code = event.get("errorCode")
         if code in {"AccessDenied", "AccessDeniedException", "UnauthorizedOperation"}:
             attempt = "denied"
-        elif code or event.get("errorMessage"):
+        elif "errorCode" in event or "errorMessage" in event:
             attempt = "failed"
         else:
             attempt = "accepted"
@@ -84,31 +100,45 @@ def review(target, events, observation, *, as_of):
         if event_id in matched and matched[event_id] != record:
             raise ValueError("Conflicting copies of the same CloudTrail event")
         matched[event_id] = record
-    records = sorted(matched.values(), key=lambda r: (timestamp(r["time"]), r["id"]))
-    attempts = {r["attempt"] for r in records}
-    attempt = next(iter(attempts)) if len(attempts) == 1 else ("mixed" if records else "pending")
+    return sorted(matched.values(), key=lambda row: (timestamp(row["time"]), row["id"]))
+
+
+def attempt_summary(records):
+    attempts = {record["attempt"] for record in records}
+    if not attempts:
+        return "pending"
+    if len(attempts) > 1:
+        return "mixed"
+    return attempts.pop()
+
+
+def outcome_for(attempt, state, expected, fresh):
+    if not fresh or state not in {"present", "absent"}:
+        return "pending"
+    if attempt == "accepted":
+        return "expected_state_observed" if state == expected else "state_differs"
+    if attempt == "denied":
+        return "denial_and_opposite_state_observed" if state != expected else "conflicting_evidence"
+    return "pending"
+
+
+def review(target, events, observation, *, as_of):
+    """Inputs come from a trusted collector. Missing or conflicting evidence remains explicit."""
+    validate(target)
+    started, cutoff = timestamp(target["started_at"]), timestamp(as_of)
+    if cutoff < started:
+        raise ValueError("Review predates decision")
+    records = matching_events(target, events, started, cutoff)
+    attempt = attempt_summary(records)
     expected = "absent" if target["operation"] == "DeleteTable" else "present"
-    state, observed = "unknown", None
+    checkpoint = timestamp(records[-1]["time"]) if records else started
+    state, fresh = "unknown", False
     if observation is not None:
-        if set(observation) != {"account", "region", "table", "state", "observed_at"}:
-            raise ValueError("Unexpected observation fields")
-        if any(observation.get(k) != target[k] for k in ("region", "account", "table")):
-            raise ValueError("Observation target differs from authorised target")
-        state, observed = observation["state"], observation["observed_at"]
-        if state not in {"unknown", "absent", "present", "unreadable", "transitioning"}:
-            raise ValueError("Invalid observation")
-        observed_time = timestamp(observed)
+        state, observed_time = validate_observation(target, observation)
         if observed_time > cutoff:
             raise ValueError("Observation is after review time")
-    checkpoint = timestamp(records[-1]["time"]) if records else started
-    # Both evidence sources must support the conclusion. Preserve earlier reads as context.
-    fresh = observed is not None and timestamp(observed) > checkpoint
-    outcome = "pending"
-    if fresh and state in {"present", "absent"}:
-        if attempt == "accepted":
-            outcome = "expected_state_observed" if state == expected else "state_differs"
-        elif attempt == "denied":
-            outcome = "denial_and_opposite_state_observed" if state != expected else "conflicting_evidence"
+        fresh = observed_time > checkpoint
+    outcome = outcome_for(attempt, state, expected, fresh)
     return {"target": target, "reviewed_at": as_of, "expected_state": expected, "aws_attempt": attempt,
             "enforcement_layer": "AWS (specific policy unverified)" if attempt == "denied" else None,
             "observation": observation, "events": records, "outcome": outcome}
