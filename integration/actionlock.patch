@@ -1,0 +1,275 @@
+diff --git a/actionlock/__main__.py b/actionlock/__main__.py
+index 18b382d..b1cbc52 100644
+--- a/actionlock/__main__.py
++++ b/actionlock/__main__.py
+@@ -67,6 +67,9 @@ def build_parser() -> argparse.ArgumentParser:
+     contract = commands.add_parser("contract", help="Sign or verify a human-written task contract")
+     contract.add_argument("action", choices=["sign", "verify"])
+     contract.add_argument("file", type=Path)
++    export = commands.add_parser("export-decisions", help="Recover pending signed decision receipts")
++    export.add_argument("--database", required=True, type=Path)
++    export.add_argument("--receipts", required=True, type=Path)
+     check = commands.add_parser("verify", help="Check a plan against a signed contract and inventory")
+     check.add_argument("--contract", type=Path, required=True, help="Signed contract envelope")
+     check.add_argument("--plan", type=Path, required=True, help="terraform show -json output of the saved plan")
+@@ -85,6 +88,14 @@ def main(argv: list[str] | None = None) -> int:
+         parser.print_help()
+         return 1
+     try:
++        if args.command == "export-decisions":
++            from .approvals import ApprovalStore
++            store = ApprovalStore(args.database)
++            try:
++                store.export_pending(ReceiptLog(args.receipts, HmacSigner.from_environment()))
++            finally:
++                store.close()
++            return 0
+         if args.command == "contract":
+             return contract_command(args)
+         if args.command == "verify":
+diff --git a/actionlock/approvals.py b/actionlock/approvals.py
+index 8d4b7a5..546407b 100644
+--- a/actionlock/approvals.py
++++ b/actionlock/approvals.py
+@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS requests (
+     consumed_at TEXT,
+     receipt_id TEXT UNIQUE
+ );
++CREATE TABLE IF NOT EXISTS decision_outbox (
++    receipt_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, payload TEXT NOT NULL,
++    exported INTEGER NOT NULL DEFAULT 0
++);
+ CREATE TABLE IF NOT EXISTS approvals (
+     request_id TEXT NOT NULL REFERENCES requests(id),
+     approver TEXT NOT NULL,
+@@ -154,7 +158,8 @@ class ApprovalStore:
+         given = set(self.approvers(request_id))
+         return owner in given and bool(given & set(json.loads(approvers)))
+ 
+-    def consume(self, request_id: str, binding: Binding, now: datetime, receipt_id: str | None = None) -> list[str]:
++    def consume(self, request_id: str, binding: Binding, now: datetime, receipt_id: str | None = None,
++                decision: dict | None = None) -> list[str]:
+         """Single use: succeeds once, only if authorized, unexpired and exactly matching."""
+         stored, _, _, _, _, expires_at, consumed_at = self._request(request_id)
+         if stored != binding.to_json():
+@@ -170,11 +175,25 @@ class ApprovalStore:
+                 (format_time(now), receipt_id, request_id))
+             if cursor.rowcount != 1:
+                 raise ValidationError("Approval already used")
++            approvers = self.approvers(request_id)
++            if decision is not None:
++                if not receipt_id:
++                    raise ValidationError("Decision receipt ID required")
++                payload = canonical_json({**decision, "approvers": approvers}).decode("ascii")
++                self.connection.execute("INSERT INTO decision_outbox(receipt_id,created_at,payload) VALUES(?,?,?)",
++                                        (receipt_id, format_time(now), payload))
+             self.connection.execute("COMMIT")
+         except BaseException:
+             self.connection.execute("ROLLBACK")
+             raise
+-        return self.approvers(request_id)
++        return approvers
++
++    def export_pending(self, log):
++        rows = self.connection.execute(
++            "SELECT receipt_id,created_at,payload FROM decision_outbox WHERE exported=0 ORDER BY rowid").fetchall()
++        for receipt_id, created_at, payload in rows:
++            log.append("decision", json.loads(payload), parse_time(created_at), receipt_id)
++            self.connection.execute("UPDATE decision_outbox SET exported=1 WHERE receipt_id=?", (receipt_id,))
+ 
+ 
+ def binding_for(verdict: dict, plan_digest: str, workspace: str, provider_lock_digest: str,
+diff --git a/actionlock/contract.py b/actionlock/contract.py
+index 11fa502..4270c26 100644
+--- a/actionlock/contract.py
++++ b/actionlock/contract.py
+@@ -118,10 +118,16 @@ class Contract:
+     scope: Selector
+     allowed_changes: tuple[str, ...]
+     protected: Selector
++    allowed_tag_keys: tuple[str, ...] | None = None
+ 
+     @classmethod
+     def from_dict(cls, value: Any) -> "Contract":
+-        value = strict_object(value, CONTRACT_FIELDS, CONTRACT_FIELDS)
++        value = strict_object(value, CONTRACT_FIELDS | {"allowed_tag_keys"}, CONTRACT_FIELDS)
++        tag_keys = None
++        if "allowed_tag_keys" in value:
++            tag_keys = tuple(sorted(string_list(value["allowed_tag_keys"], limit=32, item_limit=128)))
++            if not tag_keys or value["allowed_changes"] != ["update"]:
++                raise ValidationError("Tag-scoped contracts require update only and at least one tag key")
+         if value["format_version"] != FORMAT_VERSION or isinstance(value["format_version"], bool):
+             raise ValidationError("Unsupported contract format")
+         owner = text(value["owner"], 128)
+@@ -147,11 +153,13 @@ class Contract:
+             environment=name(value["environment"]),
+             scope=Selector.from_dict(value["scope"], SCOPE_FIELDS, require_addresses=True),
+             allowed_changes=tuple(sorted(changes, key=CHANGE_TYPES.index)),
++            allowed_tag_keys=tag_keys,
+             protected=Selector.from_dict(value["protected"], PROTECTED_FIELDS, require_addresses=False),
+         )
+ 
+     def to_dict(self) -> dict:
+         return {
++            **({"allowed_tag_keys": list(self.allowed_tag_keys)} if self.allowed_tag_keys is not None else {}),
+             "format_version": FORMAT_VERSION, "contract_id": self.contract_id, "owner": self.owner,
+             "approvers": list(self.approvers), "task": self.task,
+             "created_at": format_time(self.created_at), "expires_at": format_time(self.expires_at),
+diff --git a/actionlock/receipts.py b/actionlock/receipts.py
+index 9614197..d971754 100644
+--- a/actionlock/receipts.py
++++ b/actionlock/receipts.py
+@@ -46,9 +46,24 @@ class ReceiptLog:
+     def append(self, kind: str, fields: dict[str, Any], now: datetime, receipt_id: str | None = None) -> dict:
+         if kind not in KINDS:
+             raise ValueError("Unknown receipt kind")
++        # All writers use one lock for chain validation, tail selection and append.
++        # Customer-hosted runner uses a local Linux/POSIX filesystem.
++        import fcntl
++        self.path.parent.mkdir(parents=True, exist_ok=True)
++        with self.path.with_suffix(self.path.suffix + ".lock").open("a") as lock:
++            fcntl.flock(lock, fcntl.LOCK_EX)
++            return self._append_locked(kind, fields, now, receipt_id)
++
++    def _append_locked(self, kind, fields, now, receipt_id):
+         entries = self.entries()
+         if entries:
+             self.verify()
++        if receipt_id:
++            for entry in entries:
++                if entry["receipt_id"] == receipt_id:
++                    if (entry["kind"], entry["fields"], entry["created_at"]) != (kind, fields, format_time(now)):
++                        raise ValidationError("Receipt ID conflicts with existing entry")
++                    return entry
+         previous = entries[-1]["hash"] if entries else GENESIS
+         body = {"seq": len(entries), "receipt_id": receipt_id or new_receipt_id(), "kind": kind,
+                 "created_at": format_time(now), "prev_hash": previous, "fields": fields}
+diff --git a/actionlock/runner.py b/actionlock/runner.py
+index 8962145..e17d532 100644
+--- a/actionlock/runner.py
++++ b/actionlock/runner.py
+@@ -116,15 +116,28 @@ class Runner:
+             binding = binding_for(verdict, plan_file_digest(plan_file), contract.workspace,
+                                   lock_file_digest(workdir), contract)
+             receipt_id = new_receipt_id()
+-            approvers = tuple(self.store.consume(request_id, binding, self.clock(), receipt_id))
++
+         except ValidationError as error:
+             raise RunRefused(str(error)) from error
+         common = {"request_id": request_id, "contract_id": contract.contract_id,
+                   "contract_digest": contract.digest(), "plan_digest": binding.plan_digest,
+                   "verdict_digest": binding.verdict_digest, "outcome": verdict["outcome"],
+-                  "approvers": list(approvers), "aws_account_id": contract.aws_account_id,
++                  "aws_account_id": contract.aws_account_id,
+                   "region": contract.region, "role_arn": role_arn}
+-        self.receipts.append("decision", common, self.clock(), receipt_id)
++        targets = []
++        for change in plan.managed_changes():
++            if change.type == "aws_dynamodb_table" and change.action in {"create", "delete"}:
++                values = change.before if change.action == "delete" else change.after
++                if isinstance(values, dict) and isinstance(values.get("name"), str):
++                    targets.append({"table": values["name"], "operation": {"create": "CreateTable",
++                                    "delete": "DeleteTable"}[change.action], "address": change.address})
++        common["targets"] = targets
++        try:
++            approvers = tuple(self.store.consume(request_id, binding, self.clock(), receipt_id, decision=common))
++        except ValidationError as error:
++            raise RunRefused(str(error)) from error
++        self.store.export_pending(self.receipts)
++        common["approvers"] = list(approvers)
+         credentials = self.sts.assume_role(role_arn, receipt_id, receipt_id, policy.to_json(), SESSION_SECONDS)
+         if self.sts.caller_account(credentials) != contract.aws_account_id:
+             self.receipts.append("apply", {**common, "decision_receipt": receipt_id, "applied": False,
+diff --git a/actionlock/verifier.py b/actionlock/verifier.py
+index 6bbfea4..58bacd3 100644
+--- a/actionlock/verifier.py
++++ b/actionlock/verifier.py
+@@ -17,6 +17,7 @@ from __future__ import annotations
+ 
+ from dataclasses import dataclass
+ 
++from .schema import canonical_json
+ from .classify import Assessment, assess
+ from .contract import Contract, address_matches, tags_match
+ from .inventory import Inventory
+@@ -44,6 +45,7 @@ RULES = (
+     Rule("unverifiable-environment", frozenset({"environment_unknown"}), "unverifiable"),
+     Rule("unverifiable-scope-tags", frozenset({"scope_unverified"}), "unverifiable"),
+     Rule("unverifiable-protection", frozenset({"protection_unverified"}), "unverifiable"),
++    Rule("outside-tag-contract", frozenset({"tag_scope_exceeded"}), "needs_approval"),
+     Rule("outside-scope", frozenset({"out_of_scope"}), "needs_approval"),
+     Rule("outside-change-type", frozenset({"change_type_not_allowed"}), "needs_approval"),
+     Rule("outside-environment", frozenset({"environment_mismatch"}), "needs_approval"),
+@@ -53,6 +55,7 @@ RULES = (
+ )
+ 
+ REASONS = {
++    "tag_scope_exceeded": "cannot verify that only the permitted tag keys change",
+     "protected_target": "touches a resource the contract protects",
+     "unsupported": "resource type is not supported",
+     "data_loss_risk": "deletes or replaces a resource that holds or may hold data",
+@@ -157,6 +160,35 @@ def decide(facts: set[str]) -> tuple[str, tuple[str, ...], tuple[dict, ...]]:
+     return outcome, reasons, tuple(trace)
+ 
+ 
++def _known(value):
++    if isinstance(value, dict):
++        return all(_known(v) for v in value.values())
++    if isinstance(value, list):
++        return all(_known(v) for v in value)
++    return value is False
++
++
++def _only_allowed_tags(change, keys):
++    if (change.action != "update" or change.previous_address or change.importing or change.deposed
++            or change.replace_paths or not _known(change.after_unknown)):
++        return False
++    before, after = change.before, change.after
++    if not isinstance(before, dict) or not isinstance(after, dict) or "tags" not in before or "tags" not in after:
++        return False
++    for field in before.keys() | after.keys():
++        if field in {"tags", "tags_all"}:
++            left, right = before.get(field), after.get(field)
++            if not isinstance(left, dict) or not isinstance(right, dict):
++                return False
++            if any(not isinstance(v, str) for v in (*left.values(), *right.values())):
++                return False
++            if any(left.get(k) != right.get(k) for k in (left.keys() | right.keys()) - set(keys)):
++                return False
++        elif field not in before or field not in after or canonical_json(before[field]) != canonical_json(after[field]):
++            return False
++    return True
++
++
+ def verify(contract: Contract, plan: Plan, inventory: Inventory) -> Verdict:
+     plan_reasons: list[str] = []
+     prohibited = False
+@@ -177,7 +209,10 @@ def verify(contract: Contract, plan: Plan, inventory: Inventory) -> Verdict:
+     verdicts = []
+     for change in plan.managed_changes():
+         assessment = assess(change, inventory)
+-        outcome, reasons, trace = decide(contract_facts(assessment, contract))
++        facts = contract_facts(assessment, contract)
++        if contract.allowed_tag_keys is not None and not _only_allowed_tags(change, contract.allowed_tag_keys):
++            facts.add("tag_scope_exceeded")
++        outcome, reasons, trace = decide(facts)
+         layers = tuple(enforcement_layers(scoped.get(change.address, False), shared,
+                                           verified.get(change.address, False)))
+         verdicts.append(ChangeVerdict(assessment, outcome, reasons, trace, layers))
+diff --git a/live/sandbox_run.py b/live/sandbox_run.py
+index 2b6296e..7fd56f4 100644
+--- a/live/sandbox_run.py
++++ b/live/sandbox_run.py
+@@ -229,7 +229,11 @@ def table_row(address: str, table: str) -> dict | None:
+     refreshed about every six hours, so emptiness cannot be verified."""
+     described = aws("dynamodb", "describe-table", "--table-name", table)
+     if described.returncode != 0:
+-        return None
++        observed = format_time(datetime.now(timezone.utc))
++        if "(ResourceNotFoundException)" in described.stderr:
++            return None
++        state = "unreadable" if "(AccessDenied" in described.stderr else "unknown"
++        raise RuntimeError(f"DynamoDB inventory {state} at {observed}; observation required before apply")
+     arn = json.loads(described.stdout)["Table"]["TableArn"]
+     listed = aws("dynamodb", "list-tags-of-resource", "--resource-arn", arn)
+     row = {"address": address, "type": "aws_dynamodb_table", "environment": "unknown", "holds_data": None}
