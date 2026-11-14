@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+*.sqlite*
+*.db
+receipts.jsonl*
+.env
