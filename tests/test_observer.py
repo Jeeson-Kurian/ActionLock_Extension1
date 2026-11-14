@@ -18,8 +18,21 @@ class ObservationTests(TestCase):
     def test_read_requires_matching_resource_identity(self):
         self.assertEqual(self.read(self.arn.replace("eu-west-1", "eu-west-2"), "ACTIVE"), "unknown")
 
-    def test_pending_deletion_is_transitional(self):
-        self.assertEqual(self.read(self.arn, "DELETING"), "transitioning")
+    def test_documented_lifecycle_transitions(self):
+        for status in ("CREATING", "UPDATING", "DELETING", "ARCHIVING"):
+            with self.subTest(status=status):
+                self.assertEqual(self.read(self.arn, status), "transitioning")
+
+    def test_inconclusive_status_is_unknown(self):
+        for status in (None, "FUTURE_STATUS", "ARCHIVED", "INACCESSIBLE_ENCRYPTION_CREDENTIALS",
+                       "REPLICATION_NOT_AUTHORIZED"):
+            with self.subTest(status=status):
+                self.assertEqual(self.read(self.arn, status), "unknown")
+
+    def test_missing_status_is_unknown(self):
+        client = Mock()
+        client.describe_table.return_value = {"Table": {"TableArn": self.arn}}
+        self.assertEqual(observe_table(client, self.target)["state"], "unknown")
 
     def test_identified_active_table_is_present(self):
         self.assertEqual(self.read(self.arn, "ACTIVE"), "present")

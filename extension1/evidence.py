@@ -37,7 +37,11 @@ def observe_table(client, target, clock=lambda: datetime.now(timezone.utc)):
         table = client.describe_table(TableName=target["table"])["Table"]
         state = "unknown"
         if table.get("TableArn") == arn:
-            state = "present" if table.get("TableStatus") == "ACTIVE" else "transitioning"
+            status = table.get("TableStatus")
+            if status == "ACTIVE":
+                state = "present"
+            elif status in ("CREATING", "UPDATING", "DELETING", "ARCHIVING"):
+                state = "transitioning"
     except Exception as exc:
         code = getattr(exc, "response", {}).get("Error", {}).get("Code")
         if code == "ResourceNotFoundException":
