@@ -19,6 +19,8 @@ def render(report):
         lines.append(f"AWS attempt: {event['attempt']} at {event['time']} (event {event['id']})")
     if not report["events"]:
         lines.append("AWS attempt: awaiting a matching event")
+    if report["enforcement_layer"]:
+        lines.append(f"Enforcement layer: {report['enforcement_layer']}")
     if observed:
         lines.append(f"Independent read: {observed['state']} at {observed['observed_at']}")
     else:

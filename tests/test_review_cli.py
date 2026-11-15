@@ -55,3 +55,4 @@ class ReviewTests(unittest.TestCase):
         rendered = subprocess.check_output(command + ["--format", "text"], cwd=ROOT, text=True)
         for phrase in ("AWS attempt: denied", "Independent read: present", result["outcome"]):
             self.assertIn(phrase, rendered)
+        self.assertIn(f"Enforcement layer: {result['enforcement_layer']}", rendered)
