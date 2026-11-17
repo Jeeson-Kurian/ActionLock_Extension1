@@ -54,6 +54,12 @@ python -m extension1.pilot examples/pilot.json
 
 The ten labelled synthetic cases cover a protected table, successful operations, delayed events, stale reads, unreadable state and conflicting observations. The command prints the expected and actual outcome for each case and exits with status 1 on a mismatch. The signed-contract integration tests also exercise ten pairs where the same plan is checked against two different tag scopes. Neither set measures real-world effectiveness.
 
+### What the replay returns
+
+At [revision 8845147](https://github.com/Jeeson-Kurian/ActionLock_Extension1/commit/8845147327f2e6f049e1156584a4bcf7ca1c0b5c), all ten supplied fixtures matched their expected outcome. Five correctly stayed pending: asynchronous creation, a missing event, an unreadable table, a throttled request and a stale read. An accepted delete followed by an active table produced `state_differs`. A denial followed by conflicting state produced `conflicting_evidence`. These distinctions matter to an operator deciding whether to collect another observation.
+
+The standalone offline suite also passed 28 tests on Python 3.12. This replay used the checked-in synthetic cases. Measuring error rates on real AWS operations requires independently labelled observations.
+
 ## Installation and verification
 
 ```sh
